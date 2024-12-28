@@ -15,4 +15,5 @@ public interface MinioService {
 
     List<Bucket> getAllBuckets() throws Exception;
 
+    void downloadFileLocale(String objectName, String localFilePath);
 }

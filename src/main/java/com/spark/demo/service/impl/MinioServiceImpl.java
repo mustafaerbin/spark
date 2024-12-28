@@ -11,7 +11,10 @@ import io.minio.messages.Bucket;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.List;
 
 @Service
@@ -75,5 +78,16 @@ public class MinioServiceImpl implements MinioService {
         return minioClient.listBuckets();
     }
 
+    @Override
+    public void downloadFileLocale(String objectName, String localFilePath) {
+        try (InputStream stream = downloadFile(objectName)) {
+            if (!Files.exists(Paths.get(localFilePath)))
+                Files.copy(stream, Paths.get(localFilePath));
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
 
