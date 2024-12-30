@@ -25,13 +25,14 @@ public class PartOneController {
         }
     }
 
-    @GetMapping("/processAndUploadData")
-    public String processAndUploadData() {
+    @GetMapping("/spark")
+    public String spark() {
         try {
-            dataProcessingService.processAndUploadData();
+            dataProcessingService.processData();
             return "Data processed and uploaded successfully.";
         } catch (Exception e) {
             return "Error during data processing: " + e.getMessage();
         }
     }
+
 }

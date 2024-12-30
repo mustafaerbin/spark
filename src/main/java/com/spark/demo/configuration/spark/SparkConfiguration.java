@@ -13,7 +13,9 @@ public class SparkConfiguration {
             // SparkSession oluşturuluyor
             SparkSession spark = SparkSession.builder()
                     .appName("Data Analysis App")
-                    .master("local[*]") // Eğer bir Spark cluster kullanıyorsanız, burada cluster master URL'sini belirtin.
+                    .master("local[*]")
+                    .config("spark.hadoop.fs.defaultFS", "file:///")
+                    .config("spark.sql.warehouse.dir", "/tmp/spark-warehouse")
                     .getOrCreate();
             return spark;
         } catch (Exception e) {

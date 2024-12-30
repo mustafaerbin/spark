@@ -13,9 +13,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
+
+import org.apache.spark.sql.*;
+import org.apache.spark.sql.functions.*;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
 
 import static org.apache.spark.sql.functions.*;
 
@@ -34,32 +39,7 @@ public class DataProcessingServiceImpl implements DataProcessingService {
         this.sparkSession = sparkSession;
     }
 
-    public void processAndUploadData() throws RuntimeException, IOException {
-        // MinIO'dan CSV dosyalarını yükleme
-        String personPath = "s3a://demographics/person_data.csv";
-        String countryPath = "s3a://demographics/country_data.csv";
-
-        Dataset<Row> personDF = sparkSession.read().option("header", "true").csv(personPath);
-        Dataset<Row> countryDF = sparkSession.read().option("header", "true").csv(countryPath);
-
-        // Veri işleme
-        Dataset<Row> filteredDF = personDF.filter(col("age").gt(30)
-                .and(col("blood_type").isin("A+", "A-", "AB+", "AB-")));
-
-        Dataset<Row> resultDF = filteredDF.join(countryDF, "country_code")
-                .groupBy("country_name")
-                .agg(
-                        collect_list("first_name").alias("names"),
-                        count("first_name").alias("count")
-                )
-                .withColumn("name_string", concat_ws(", ", col("names")))
-                .select("country_name", "count", "name_string");
-
-        // Sonuçları CSV'ye yazma
-        String resultPath = "s3a://demographics/output/result.csv";
-        resultDF.write().option("header", "true").csv(resultPath);
-    }
-
+    @Override
     public void processData() throws Exception {
 
         // Download CSV files from MinIO
@@ -74,14 +54,21 @@ public class DataProcessingServiceImpl implements DataProcessingService {
                 .option("header", "true")
                 .load(personDataPath);
 
+        personDF.show();
+
         Dataset<Row> countryDF = sparkSession.read().format("csv")
                 .option("header", "true")
                 .load(countryDataPath);
 
-        // Filtreleme ve birleştirme işlemleri
-        Dataset<Row> filtered = personDF.filter(
-                "year(current_date()) - year(birthday) > 30 AND blood_type IN ('A+', 'A-', 'AB+', 'AB-')");
+        countryDF.show();
 
+        // Yaş hesaplama ve kan grubu filtreleme
+        Dataset<Row> filtered = personDF.filter(personDF.col("birthday").isNotNull())
+                .withColumn("age", ageFromBirthday(personDF.col("birthday"))) // Yaş hesaplama
+                .filter(col("age").gt(30)) // 30 yaş üstü
+                .filter(col("blood_type").isin("A+", "A-", "AB+", "AB-")); // Kan grubu filtreleme
+
+        filtered.show();
 
         Dataset<Row> joined = filtered.join(countryDF, "country");
 
@@ -91,19 +78,77 @@ public class DataProcessingServiceImpl implements DataProcessingService {
                         functions.concat_ws(", ", functions.collect_list("first_name")).alias("names") // names sütununu düz metin olarak birleştir
                 );
 
-        // Veriyi CSV formatında kaydetme
-        result.coalesce(1) // Tek dosya yapmak için
-                .write()
-                .option("header", "true") // Başlık satırını dahil et
-                .csv("C:/minio_data/output.csv");
+        result.show();
+        writeDatasetToExcel(result, "C:/Erbin/data/output.xlsx");
+
+        // İşlenmiş veriyi yazma
+//        result.coalesce(1) // Tek bir dosya yapmak için partisyonları birleştir
+//                .write()
+//                .mode("overwrite") // Var olan dizini sil ve üzerine yaz
+//                .option("header", "true") // Başlık satırını dahil et
+//                .csv("C:/Erbin/data/output.csv");
 
         // Upload result to MinIO
         minioClient.uploadObject(
                 io.minio.UploadObjectArgs.builder()
                         .bucket("results")
-                        .object("output.csv")
-                        .filename("C:/minio_data/output.csv")
+                        .object("output.xlsx")
+                        .filename("C:/Erbin/data/output.xlsx")
                         .build()
         );
     }
+
+    // Yaş hesaplamak için fonksiyon
+    public static Column ageFromBirthday(Column birthday) {
+        return expr("datediff(current_date(), to_date(" + birthday + ", 'dd-MM-yyyy')) / 365");
+    }
+
+    public static void writeDatasetToExcel(Dataset<Row> dataset, String filePath) throws IOException {
+        // Excel dosyasını oluştur
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("Data");
+
+        // Dataset'ten başlıkları al
+        String[] columns = dataset.columns();
+
+        // Başlık satırını ekle
+        org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < columns.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(columns[i]);
+        }
+
+        // Verileri satırlara yaz
+        int rowNum = 1;
+        for (Row row : dataset.collectAsList()) {
+            org.apache.poi.ss.usermodel.Row sheetRow = sheet.createRow(rowNum++);
+            for (int i = 0; i < row.length(); i++) {
+                Cell cell = sheetRow.createCell(i);
+                Object cellValue = row.get(i);
+
+                // Farklı veri türleri için uygun hücre değeri ayarlama
+                if (cellValue instanceof String) {
+                    cell.setCellValue((String) cellValue);
+                } else if (cellValue instanceof Integer) {
+                    cell.setCellValue((Integer) cellValue);
+                } else if (cellValue instanceof Double) {
+                    cell.setCellValue((Double) cellValue);
+                } else if (cellValue instanceof Boolean) {
+                    cell.setCellValue((Boolean) cellValue);
+                } else {
+                    cell.setCellValue(cellValue != null ? cellValue.toString() : "");
+                }
+            }
+        }
+
+        // Excel dosyasını kaydet
+        try (FileOutputStream fileOut = new FileOutputStream(filePath)) {
+            workbook.write(fileOut);
+        }
+
+        // Kaynakları temizle
+        workbook.close();
+    }
+
+
 }
