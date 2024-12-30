@@ -1,8 +1,12 @@
 package com.spark.demo.service;
 
+import io.minio.errors.*;
 import io.minio.messages.Bucket;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 public interface MinioService {
@@ -15,5 +19,8 @@ public interface MinioService {
 
     List<Bucket> getAllBuckets() throws Exception;
 
-    void downloadFileLocale(String objectName, String localFilePath);
+    void downloadFileLocale(final String objectName, final String localFilePath);
+
+    void uploadObject(final String bucket, final String object, final String fileName) throws IOException, ServerException, InsufficientDataException, ErrorResponseException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException;
+
 }

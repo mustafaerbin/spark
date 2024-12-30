@@ -6,8 +6,9 @@ import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
-import io.minio.errors.MinioException;
+import io.minio.errors.*;
 import io.minio.messages.Bucket;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +16,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 @Service
@@ -24,6 +27,7 @@ public class MinioServiceImpl implements MinioService {
     private final MinioClient minioClient;
     private final MinioConfigurationProperties minioConfigurationProperties;
 
+    @Autowired
     public MinioServiceImpl(
             MinioClient minioClient, MinioConfigurationProperties minioConfigurationProperties) {
         this.minioClient = minioClient;
@@ -88,6 +92,16 @@ public class MinioServiceImpl implements MinioService {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public void uploadObject(String bucket, String object, String fileName) throws IOException, ServerException, InsufficientDataException, ErrorResponseException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
+        minioClient.uploadObject(
+                io.minio.UploadObjectArgs.builder()
+                        .bucket(bucket)
+                        .object(object)
+                        .filename(fileName)
+                        .build());
     }
 }
 

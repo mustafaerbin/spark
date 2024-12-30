@@ -19,7 +19,6 @@ public class SparkConfiguration {
                     .getOrCreate();
             return spark;
         } catch (Exception e) {
-            // SparkSession yaratılırken bir hata oluşursa burada yakalayabilirsiniz.
             throw new RuntimeException("Error initializing SparkSession", e);
         }
     }

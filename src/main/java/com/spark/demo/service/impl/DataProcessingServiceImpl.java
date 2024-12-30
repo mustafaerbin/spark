@@ -2,6 +2,7 @@ package com.spark.demo.service.impl;
 
 import com.spark.demo.service.DataProcessingService;
 import com.spark.demo.service.MinioService;
+import com.spark.demo.service.SparkService;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.UploadObjectArgs;
@@ -28,15 +29,13 @@ import static org.apache.spark.sql.functions.*;
 @Transactional
 public class DataProcessingServiceImpl implements DataProcessingService {
 
-    private final MinioClient minioClient;
-    private final SparkSession sparkSession;
-    @Autowired
-    MinioService minioService;
+    private final MinioService minioService;
+    private final SparkService sparkService;
 
     @Autowired
-    public DataProcessingServiceImpl(MinioClient minioClient, SparkSession sparkSession) {
-        this.minioClient = minioClient;
-        this.sparkSession = sparkSession;
+    public DataProcessingServiceImpl(MinioService minioService, SparkService sparkService) {
+        this.minioService = minioService;
+        this.sparkService = sparkService;
     }
 
     @Override
@@ -50,16 +49,11 @@ public class DataProcessingServiceImpl implements DataProcessingService {
         minioService.downloadFileLocale("country_data.csv", countryDataPath);
 
         // Load the CSV files into DataFrames
-        Dataset<Row> personDF = sparkSession.read().format("csv")
-                .option("header", "true")
-                .load(personDataPath);
-
+        Dataset<Row> personDF = sparkService.getDataSet(personDataPath);
         personDF.show();
 
-        Dataset<Row> countryDF = sparkSession.read().format("csv")
-                .option("header", "true")
-                .load(countryDataPath);
-
+        // Load the CSV files into DataFrames
+        Dataset<Row> countryDF = sparkService.getDataSet(countryDataPath);
         countryDF.show();
 
         // Yaş hesaplama ve kan grubu filtreleme
@@ -89,13 +83,7 @@ public class DataProcessingServiceImpl implements DataProcessingService {
 //                .csv("C:/Erbin/data/output.csv");
 
         // Upload result to MinIO
-        minioClient.uploadObject(
-                io.minio.UploadObjectArgs.builder()
-                        .bucket("results")
-                        .object("output.xlsx")
-                        .filename("C:/Erbin/data/output.xlsx")
-                        .build()
-        );
+        minioService.uploadObject("results", "output.xlsx", "C:/Erbin/data/output.xlsx");
     }
 
     // Yaş hesaplamak için fonksiyon
